@@ -128,12 +128,20 @@ async def permit(request: CheckedData):
     text = request.text
     target = request.target
     nick_name = request.nick_name
+    label = request.label
     
     ## 1. delete data in need_check
     out = await mongo.delete_one("hate_data", "need_check_data", {"_id": id})
     
     ## 2. update in hate data -> 2 + update target
-    out = await mongo.update_one("hate_data", "hate_data", {"_id": id}, {"target": target, "status": 2})
+    if label == 1:
+        status = 3
+    elif label == 2:
+        status = 4
+    else:
+        status = 2
+    print(status)
+    out = await mongo.update_one("hate_data", "hate_data", {"_id": id}, {"target": target, "status": status})
     
     ## 3. user info update
     out = await mongo.find_one("hate_data", "user_info", {"nick_name": nick_name})
