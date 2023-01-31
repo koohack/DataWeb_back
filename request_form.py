@@ -16,3 +16,10 @@ class CheckedData(BaseModel):
     target: str
     text: str
     id: int
+
+class RewardData(BaseModel):
+    reward1: int
+    reward2: int
+    reward3: int
+    reward4: int
+    id: int

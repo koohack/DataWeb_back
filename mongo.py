@@ -91,7 +91,7 @@ class MongoDB():
                 if limit == None:
                     output = await collection.find(data).sort(sort_key).to_list()
                 else:
-                    output = await collection.find(data).sort(sort_key).limit(limit).to_list(limit)
+                    output = await collection.find(data).sort(sort_key, -1).limit(limit).to_list(limit)
             else:
                 if limit == None:
                     output = await collection.find(data).to_list()

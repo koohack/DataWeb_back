@@ -6,12 +6,14 @@ from mongo import MongoDB
 from fastapi import FastAPI
 from pymongo import MongoClient
 from datetime import date, timedelta
-from request_form import LabeledData, CheckedData
+from request_form import LabeledData, CheckedData, RewardData
 from fastapi.middleware.cors import CORSMiddleware
 
 
 ## Static Parameters
 DATA_LENGTH = 72706
+reward_check = [0] * 601
+
 
 ## Connections
 mongo = MongoDB()
@@ -54,7 +56,7 @@ async def get_text():
         info = {"_id": id}
         
         data = await mongo.find_one("hate_data", "hate_data", info)
-        if not data["status"]:
+        if data["status"] == 0:
             break
         
     text = data["text"]
@@ -97,7 +99,11 @@ async def labeling(request : LabeledData):
         out = await mongo.insert_one("hate_data", "labeled_count", {"date": str(today), "count": 1})
     else:
         out = await mongo.update_one("hate_data", "labeled_count", {"date": str(today)}, {"count": out["count"] + 1})
-        
+    
+    ## Count need check
+    out = await mongo.find_one("hate_data", "check_count", {"id": -1})
+    out = await mongo.update_one("hate_data", "check_count", {"id": -1}, {"count": out["count"] + 1})
+    
     ## Get random data which status is not 0
     while True:
         id = random.randrange(0, DATA_LENGTH)
@@ -113,7 +119,7 @@ async def labeling(request : LabeledData):
 
 @app.get("/api/get_need_check")
 async def get_need_check():
-    out = await mongo.find_many("hate_data", "need_check_data", data={}, limit=20)
+    out = await mongo.find_many("hate_data", "need_check_data", data={}, limit=30)
     
     response = {}
     for i in range(len(out)):
@@ -159,6 +165,10 @@ async def permit(request: CheckedData):
         out = await mongo.update_one("hate_data", "target_count", {"date": str(today)}, {"count": out["count"] + 1})
     print("ok")
     
+    ## 5. Delete the count
+    out = await mongo.find_one("hate_data", "check_count", {"id": -1})
+    out = await mongo.update_one("hate_data", "check_count", {"id": -1}, {"count": out["count"] - 1})
+    
     return {"result": "ok"}
 
 
@@ -173,9 +183,59 @@ async def reject(request: CheckedData):
     out = await mongo.delete_one("hate_data", "need_check_data", {"_id": id})
     ## 2. update in hate data -> 0 original
     out = await mongo.update_one("hate_data", "hate_data", {"_id": id}, {"target": target, "status": 0})
+    ## 3. Delete the count
+    out = await mongo.find_one("hate_data", "check_count", {"id": -1})
+    out = await mongo.update_one("hate_data", "check_count", {"id": -1}, {"count": out["count"] - 1})
+    
     print("reject")
     
     return {"result": "reject"}
+
+
+@app.get("/api/reward_data")
+async def reward_data():
+    count = 0
+    while True:
+        id = random.randrange(0, 601)
+        info = {"_id": id}
+        
+        data = await mongo.find_one("reward_model_data", "data", info)
+        count += 1
+        if data["status"] == 0:
+            break
+        if count > 2000:
+            break
+    
+    if count > 2000:
+        return {
+            "_id": -1,
+            "text": "끝났거나, 다시 새로고침이 필요하거나",
+            "data1": "정말 끝이라는 소리임",
+            "data2": "아니면 새로고침이 필요할지도?",
+            "data3": "두번 새로고침했는데도 안되면 끝난거임",
+            "data4": "",
+        }
+        
+    return data
+    
+@app.post("/api/post_reward_data")
+async def post_reward_data(request: RewardData):
+    id = request.id
+    reward1 = request.reward1
+    reward2 = request.reward2
+    reward3 = request.reward3
+    reward4 = request.reward4
+    data = {
+        "_id": id,
+        "reward1": reward1,
+        "reward2": reward2,
+        "reward3": reward3,
+        "reward4": reward4,
+    }
+
+    out = await mongo.insert_one("reward_model_data", "checked_data", data)
+    print("reward data: insert ok")
+    return {"result": "ok"}
 
 
 @app.get("/api/count/get_top_user")
@@ -187,17 +247,59 @@ async def get_top_user():
     
     response = []
     for item in out:
-        response.append({"x": item["nick_name"], "y": item["count"]})
+        response.append({"user": item["nick_name"], "data_count": item["count"]})
         
     return {"data": response}
 
-
-
-@app.get("/api/count/daily_labeled")
-async def daily_labeled():
-    return
-
-@app.get("/api/count/daily_permited")
-async def daily_permited():
-    return
+@app.get("/api/dashboard_data")
+async def get_dashboard_data():
+    response = {}
+    
+    today = date.today()
+    
+    ## 1. get total data
+    daily_data = []
+    today = date.today() - timedelta(7)
+    for i in range(8):
+        now = today + timedelta(i)
+        out = await mongo.find_one("hate_data", "labeled_count", {"date": str(now)})
+        daily_data.append({"x": str(now), "y": out["count"]})
+    
+    response["daily_data"] = [{"id": "Daily Collected", "data": daily_data}]
+    
+    ## 2. get top user
+    out = await mongo.find_many("hate_data", "user_info", {}, "count", 10)
+    out = list(out)
+    out = out[-10:]
+    
+    top_user = []
+    for item in out:
+        top_user.append({"user": item["nick_name"], "data_count": item["count"]})
+    
+    response["top_user"] = top_user
+    
+    ## 3. get total need check data
+    out = await mongo.find_one("hate_data", "check_count", {"id": -1})
+    check_count = out["count"]
+    
+    response["check_count"] = check_count
+    
+    ## 4. get today hit
+    today = date.today()
+    out = await mongo.find_one("hate_data", "view_count", {"date": str(today)})
+    today_hit = out["count"]
+    
+    response["today_hit"] = today_hit
+    
+    ## 5. get today data
+    out = await mongo.find_one("hate_data", "target_count", {"date": str(today)})
+    if out == None:
+        out = await mongo.insert_one("hate_data", "target_count", {"date": str(today), "count": 0})
+        today_data = 0
+    else:
+        today_data = out["count"]
+     
+    response["today_data"] = today_data
+    
+    return response
 

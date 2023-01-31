@@ -183,19 +183,45 @@ def count_info(mongo):
     
     print("ok")
 
-
 def initial(mongo):
     count_info(mongo)
     insert_hate_data(mongo)
     print("all ok")
     return
 
+def init_reward_database(mongo):
+    mongo.drop_collection("reward_model_data", "data")
+    mongo.drop_collection("reward_model_data", "checked_data")
+    db = mongo.client["reward_model_data"]
+    collection = db["data"]
+
+def insert_reward_data(mongo):
+    data = pd.read_csv("reward_sample.csv")
+    
+    text = list(data["text"])
+    data1 = list(data["label1"])
+    data2 = list(data["label2"])
+    data3 = list(data["label3"])
+    data4 = list(data["target"])
+    id = list(data["id"])
+    
+    for i in range(len(data1)):
+        now_data = {
+            "_id": i,
+            "p_id": id[i],
+            "text": text[i],
+            "data1": data1[i],
+            "data2": data2[i],
+            "data3": data3[i],
+            "data4": data4[i],
+            "status": 0,
+        }
+        mongo.insert_one("reward_model_data", "data", now_data)
+    print("reward insert ok")
 
 if __name__ == "__main__":
     mongo = MongoDB()
-    #initial(mongo)
-    #insert_hate_data(mongo)
-    out = mongo.find_many("hate_data", "user_info", {})
-    out = list(out)
-    out = []
-    print(out[-10:])
+    #init_reward_database(mongo)
+    #insert_reward_data(mongo)
+    mongo.drop_collection("hate_data", "check_count")
+    mongo.insert_one("hate_data", "check_count", {"id": -1, "count": 239})
