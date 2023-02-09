@@ -23,3 +23,11 @@ class RewardData(BaseModel):
     reward3: int
     reward4: int
     id: int
+    
+class PostData(BaseModel):
+    id: int
+    
+class CommentData(BaseModel):
+    id: int
+    comment: str
+    fixed: str

@@ -3,10 +3,10 @@ import logging
 import datetime
 from asyncio import run
 from mongo import MongoDB
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pymongo import MongoClient
 from datetime import date, timedelta
-from request_form import LabeledData, CheckedData, RewardData
+from request_form import LabeledData, CheckedData, RewardData, PostData, CommentData
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -20,7 +20,7 @@ mongo = MongoDB()
 app = FastAPI()
 logger = logging.getLogger()
 
-## Middleware (for testing)
+## Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -196,17 +196,18 @@ async def reject(request: CheckedData):
 async def reward_data():
     count = 0
     while True:
-        id = random.randrange(0, 601)
+        id = random.randrange(0, 600)
         info = {"_id": id}
         
         data = await mongo.find_one("reward_model_data", "data", info)
         count += 1
+
         if data["status"] == 0:
             break
-        if count > 2000:
+        if count == 2000:
             break
     
-    if count > 2000:
+    if count == 2000:
         return {
             "_id": -1,
             "text": "끝났거나, 다시 새로고침이 필요하거나",
@@ -233,6 +234,8 @@ async def post_reward_data(request: RewardData):
         "reward4": reward4,
     }
 
+    out = await mongo.update_one("reward_model_data", "data", {"_id": id}, {"status": 1})
+    
     out = await mongo.insert_one("reward_model_data", "checked_data", data)
     print("reward data: insert ok")
     return {"result": "ok"}
@@ -257,7 +260,17 @@ async def get_dashboard_data():
     
     today = date.today()
     
-    ## 1. get total data
+    ## 1. get today data
+    out = await mongo.find_one("hate_data", "labeled_count", {"date": str(today)})
+    if out == None:
+        out = await mongo.insert_one("hate_data", "labeled_count", {"date": str(today), "count": 0})
+        today_data = 0
+    else:
+        today_data = out["count"]
+     
+    response["today_data"] = today_data
+    
+    ## 2. get total data
     daily_data = []
     today = date.today() - timedelta(7)
     for i in range(8):
@@ -267,7 +280,7 @@ async def get_dashboard_data():
     
     response["daily_data"] = [{"id": "Daily Collected", "data": daily_data}]
     
-    ## 2. get top user
+    ## 3. get top user
     out = await mongo.find_many("hate_data", "user_info", {}, "count", 10)
     out = list(out)
     out = out[-10:]
@@ -278,28 +291,51 @@ async def get_dashboard_data():
     
     response["top_user"] = top_user
     
-    ## 3. get total need check data
+    ## 4. get total need check data
     out = await mongo.find_one("hate_data", "check_count", {"id": -1})
     check_count = out["count"]
     
     response["check_count"] = check_count
     
-    ## 4. get today hit
+    ## 5. get today hit
     today = date.today()
     out = await mongo.find_one("hate_data", "view_count", {"date": str(today)})
     today_hit = out["count"]
     
     response["today_hit"] = today_hit
     
-    ## 5. get today data
-    out = await mongo.find_one("hate_data", "target_count", {"date": str(today)})
-    if out == None:
-        out = await mongo.insert_one("hate_data", "target_count", {"date": str(today), "count": 0})
-        today_data = 0
-    else:
-        today_data = out["count"]
-     
-    response["today_data"] = today_data
-    
     return response
 
+@app.get("/api/post")
+async def get_posts():
+    db = mongo.client["poster"]
+    collection = db["post_info"]
+    
+    output = await mongo.find_one("poster", "post_info", {"name": "counter"})
+    output = await collection.find({}, {"comments": 0}).to_list(output["count"])
+    
+    return {"datas": output}
+
+@app.post("/api/one_post")
+async def get_one_post(request : PostData):
+    id = request.id
+    output = await mongo.find_one("poster", "post_info", {"_id": id})
+    
+    return output
+
+@app.post("/api/post_comment")
+async def post_comment(request : CommentData):
+    id = request.id
+    comment = request.comment
+    fixed = request.fixed
+    today = str(date.today())
+    
+    data = {
+        "comment": comment,
+        "date": today,
+        "fixed": fixed,
+    }
+    
+    output = await mongo.push_data("poster", "post_info", {"_id": id}, {"comments": data})
+    
+    return {"test": "test"}

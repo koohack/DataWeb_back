@@ -1,0 +1,5 @@
+model_name: "beomi/KcELECTRA-small-v2022"
+sequence_model: "happy06/KcELECTRA-small-v2022-SequenceClassification"
+token_model: "token_model.bin"
+device: "cuda" # 'cpu'
+hate_threshold: 0.6

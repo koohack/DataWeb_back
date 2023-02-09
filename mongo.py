@@ -70,7 +70,7 @@ class MongoDB():
             print("Update many function have errors")
             return None
     
-    async def find_one(self, db_name, collection_name, data):
+    async def find_one(self, db_name, collection_name, data, start_num=None, end_num=None):
         db = self.client[db_name]
         collection = db[collection_name]
         
@@ -82,19 +82,19 @@ class MongoDB():
             return None
     
     
-    async def find_many(self, db_name, collection_name, data, sort_key=None, limit=None):
+    async def find_many(self, db_name, collection_name, data, sort_key=None, limit=None, length=None):
         db = self.client[db_name]
         collection = db[collection_name]
         
         try:
             if sort_key is not None:
                 if limit == None:
-                    output = await collection.find(data).sort(sort_key).to_list()
+                    output = await collection.find(data).sort(sort_key).to_list(length)
                 else:
                     output = await collection.find(data).sort(sort_key, -1).limit(limit).to_list(limit)
             else:
                 if limit == None:
-                    output = await collection.find(data).to_list()
+                    output = await collection.find(data).to_list(length)
                 else:
                     output = await collection.find(data).limit(limit).to_list(limit)
                     
@@ -105,6 +105,37 @@ class MongoDB():
             print("Find many function have errors")
             return None
     
+    async def push_data(self, db_name, collection_name, to_find, data):
+        db = self.client[db_name]
+        collection = db[collection_name]
+        
+        try:
+            output = await collection.update_one(to_find, {"$push": data})
+        except:
+            print("Push data function have errors")
+    
+        return None
+
+    async def slicing(self, db_name, collection_name, to_find, start_num, end_num=None):
+        db = self.client[db_name]
+        collection = db[collection_name]
+        
+        if end_num == None:
+            ## TODO: why can not use "await"
+            try:
+                output = await collection.find(to_find, {"comments": {"$slice": start_num}}).to_list(1)
+            except:
+                print("Slicing function have errors")
+                return None
+        else:
+            try:
+                output = await collection.find(to_find, {"comments": {"$slice": [start_num, end_num]}}).to_list(1)
+            except:
+                print("Slicing function have errors")
+                return None
+            
+        return output
+        
     
     async def count_documents(self, db_name, collection_name, data):
         db = self.client[db_name]
